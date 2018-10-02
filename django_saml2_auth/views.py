@@ -159,7 +159,7 @@ def acs(r):
 
     try:
         User = get_user_model()
-        target_user = User.objects.get(username=user_name)
+        target_user = User.objects.get(email=user_email)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('BEFORE_LOGIN', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['BEFORE_LOGIN'])(user_identity)
     except User.DoesNotExist:
