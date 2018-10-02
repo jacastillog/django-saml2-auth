@@ -13,9 +13,9 @@ from saml2.config import Config as Saml2Config
 from django import get_version
 from pkg_resources import parse_version
 from django.conf import settings
-from django.contrib.auth.models import (User, Group)
+from django.contrib.auth.models import Group
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, get_user_model
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.template import TemplateDoesNotExist
@@ -115,6 +115,7 @@ def denied(r):
 
 
 def _create_new_user(username, email, firstname, lastname):
+    User = get_user_model()
     user = User.objects.create_user(username, email)
     user.first_name = firstname
     user.last_name = lastname
@@ -157,6 +158,7 @@ def acs(r):
     is_new_user = False
 
     try:
+        User = get_user_model()
         target_user = User.objects.get(username=user_name)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('BEFORE_LOGIN', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['BEFORE_LOGIN'])(user_identity)
