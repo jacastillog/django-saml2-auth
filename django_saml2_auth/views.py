@@ -158,12 +158,14 @@ def acs(r):
     is_new_user = False
 
     try:
-        User = get_user_model()
+        if settings.SAML2_AUTH.get('CUSTOM_USER_MODEL'):
+            User = get_user_model()
         target_user = User.objects.get(email=user_email)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('BEFORE_LOGIN', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['BEFORE_LOGIN'])(user_identity)
     except User.DoesNotExist:
-        target_user = _create_new_user(user_name, user_email, user_first_name, user_last_name)
+        if settings.SAML2_AUTH.get('AUTO_CREATE_USER'):
+            target_user = _create_new_user(user_name, user_email, user_first_name, user_last_name)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('CREATE_USER', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['CREATE_USER'])(user_identity)
         is_new_user = True
@@ -171,7 +173,7 @@ def acs(r):
     r.session.flush()
 
     if target_user.is_active:
-        target_user.backend = 'django.contrib.auth.backends.ModelBackend'
+        target_user.backend = 'leonardo.auth.backends.LeonardoAuthenticationBackend'
         login(r, target_user)
     else:
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
