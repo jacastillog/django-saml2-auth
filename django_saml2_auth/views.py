@@ -16,7 +16,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout, get_user_model
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.template import TemplateDoesNotExist
 from django.http import HttpResponseRedirect
@@ -184,7 +184,7 @@ def acs(r):
         except TemplateDoesNotExist:
             return HttpResponseRedirect(next_url)
     else:
-        return HttpResponseRedirect(next_url)
+        return redirect(settings.BASE_URL + next_url)
 
 
 def signin(r):
