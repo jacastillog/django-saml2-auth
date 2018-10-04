@@ -173,7 +173,7 @@ def acs(r):
     r.session.flush()
 
     if target_user.is_active:
-        target_user.backend = get_backends()
+        target_user.backend = settings.AUTHENTICATION_BACKENDS[0]
         login(r, target_user)
     else:
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
