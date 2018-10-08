@@ -186,7 +186,7 @@ def acs(r):
             return HttpResponseRedirect(next_url)
     else:
         jwt_token = jwt_encode(target_user)
-        query = '?token={}'.format(target_user.id, jwt_token)
+        query = '?token={}'.format(jwt_token)
         return redirect(settings.BASE_URL + next_url + query)
 
 
