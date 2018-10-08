@@ -21,6 +21,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.template import TemplateDoesNotExist
 from django.http import HttpResponseRedirect
 from django.utils.http import is_safe_url
+from rest_auth.utils import jwt_encode
 
 try:
     import urllib2 as _urllib
@@ -184,7 +185,9 @@ def acs(r):
         except TemplateDoesNotExist:
             return HttpResponseRedirect(next_url)
     else:
-        return redirect(settings.BASE_URL + next_url)
+        jwt_token = jwt_encode(target_user)
+        query = '?token={}'.format(target_user.id, jwt_token)
+        return redirect(settings.BASE_URL + next_url + query)
 
 
 def signin(r):
