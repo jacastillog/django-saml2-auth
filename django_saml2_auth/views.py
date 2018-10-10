@@ -21,7 +21,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.template import TemplateDoesNotExist
 from django.http import HttpResponseRedirect
 from django.utils.http import is_safe_url
+
 from rest_auth.utils import jwt_encode
+from leonardo.sso_auth.models import SSOConfiguration
+from leonardo.accounts.models import Account
+
 
 try:
     import urllib2 as _urllib
@@ -34,6 +38,10 @@ if parse_version(get_version()) >= parse_version('1.7'):
     from django.utils.module_loading import import_string
 else:
     from django.utils.module_loading import import_by_path as import_string
+
+
+# SSO configuration options to login
+__sso_configuration = None
 
 
 def get_current_domain(r):
@@ -69,7 +77,7 @@ def _get_saml_client(domain):
         'metadata': {
             'remote': [
                 {
-                    "url": settings.SAML2_AUTH['METADATA_AUTO_CONF_URL'],
+                    "url": __sso_configuration.metadata_auto_conf_url,
                 },
             ],
         },
@@ -90,11 +98,7 @@ def _get_saml_client(domain):
         },
     }
 
-    if 'ENTITY_ID' in settings.SAML2_AUTH:
-        saml_settings['entityid'] = settings.SAML2_AUTH['ENTITY_ID']
-
-    if 'NAME_ID_FORMAT' in settings.SAML2_AUTH:
-        saml_settings['service']['sp']['name_id_format'] = settings.SAML2_AUTH['NAME_ID_FORMAT']
+    saml_settings['entityid'] = __sso_configuration.entity_id
 
     spConfig = Saml2Config()
     spConfig.load(saml_settings)
@@ -120,14 +124,7 @@ def _create_new_user(username, email, firstname, lastname):
     user = User.objects.create_user(username, email)
     user.first_name = firstname
     user.last_name = lastname
-    groups = [Group.objects.get(name=x) for x in settings.SAML2_AUTH.get('NEW_USER_PROFILE', {}).get('USER_GROUPS', [])]
-    if parse_version(get_version()) >= parse_version('2.0'):
-        user.groups.set(groups)
-    else:
-        user.groups = groups
-    user.is_active = settings.SAML2_AUTH.get('NEW_USER_PROFILE', {}).get('ACTIVE_STATUS', True)
-    user.is_staff = settings.SAML2_AUTH.get('NEW_USER_PROFILE', {}).get('STAFF_STATUS', True)
-    user.is_superuser = settings.SAML2_AUTH.get('NEW_USER_PROFILE', {}).get('SUPERUSER_STATUS', False)
+    user.is_active = __sso_configuration.new_user_active
     user.save()
     return user
 
@@ -150,30 +147,21 @@ def acs(r):
     if user_identity is None:
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
 
-    user_email = user_identity[settings.SAML2_AUTH.get('ATTRIBUTES_MAP', {}).get('email', 'Email')][0]
-
-    user_name = user_first_name = user_last_name = ''
-
-    if 'username' in settings.SAML2_AUTH.get('ATTRIBUTES_MAP'):
-        user_name = user_identity[settings.SAML2_AUTH.get('ATTRIBUTES_MAP', {}).get('username')][0]
-
-    if 'first_name' in settings.SAML2_AUTH.get('ATTRIBUTES_MAP'):
-        user_first_name = user_identity[settings.SAML2_AUTH.get('ATTRIBUTES_MAP', {}).get('first_name')][0]
-
-    if 'last_name' in settings.SAML2_AUTH.get('ATTRIBUTES_MAP'):
-        user_last_name = user_identity[settings.SAML2_AUTH.get('ATTRIBUTES_MAP', {}).get('last_name')][0]
+    user_email = user_identity[__sso_configuration.attr_user_email][0]
+    user_name = user_identity[__sso_configuration.attr_user_username][0]
+    user_first_name = user_identity[__sso_configuration.attr_user_firstname][0]
+    user_last_name = user_identity[__sso_configuration.attr_user_lastname][0]
 
     target_user = None
     is_new_user = False
 
     try:
-        if settings.SAML2_AUTH.get('CUSTOM_USER_MODEL'):
-            User = get_user_model()
+        User = get_user_model()
         target_user = User.objects.get(email=user_email)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('BEFORE_LOGIN', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['BEFORE_LOGIN'])(user_identity)
     except User.DoesNotExist:
-        if settings.SAML2_AUTH.get('AUTO_CREATE_USER'):
+        if __sso_configuration.auto_create_user:
             target_user = _create_new_user(user_name, user_email, user_first_name, user_last_name)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('CREATE_USER', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['CREATE_USER'])(user_identity)
@@ -218,6 +206,23 @@ def signin(r):
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
 
     r.session['login_next_url'] = next_url
+
+    account = r.GET.get('account', False)
+    provider = r.GET.get('provider', False)
+
+    try:
+        if account:
+            account_instance = Account.objects.get(name=account)
+    except Account.DoesNotExist:
+        return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
+
+    if provider:
+        try:
+            __sso_configuration = SSOConfiguration.objects.get(account=account_instance, sso_provider=provider)
+        except SSOConfiguration.DoesNotExist:
+            return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
+    else:
+        return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
 
     saml_client = _get_saml_client(get_current_domain(r))
     _, info = saml_client.prepare_for_authenticate()
