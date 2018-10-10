@@ -40,10 +40,6 @@ else:
     from django.utils.module_loading import import_by_path as import_string
 
 
-# SSO configuration options to login
-__sso_configuration = None
-
-
 def get_current_domain(r):
     if 'ASSERTION_URL' in settings.SAML2_AUTH:
         return settings.SAML2_AUTH['ASSERTION_URL']
@@ -70,14 +66,14 @@ def get_reverse(objs):
     raise Exception('We got a URL reverse issue: %s. This is a known issue but please still submit a ticket at https://github.com/fangli/django-saml2-auth/issues/new' % str(objs))
 
 
-def _get_saml_client(domain):
+def _get_saml_client(domain, sso_configuration):
     acs_url = domain + get_reverse([acs, 'acs', 'django_saml2_auth:acs'])
 
     saml_settings = {
         'metadata': {
             'remote': [
                 {
-                    "url": __sso_configuration.metadata_auto_conf_url,
+                    "url": sso_configuration.metadata_auto_conf_url,
                 },
             ],
         },
@@ -98,7 +94,7 @@ def _get_saml_client(domain):
         },
     }
 
-    saml_settings['entityid'] = __sso_configuration.entity_id
+    saml_settings['entityid'] = sso_configuration.entity_id
 
     spConfig = Saml2Config()
     spConfig.load(saml_settings)
@@ -119,19 +115,19 @@ def denied(r):
     return render(r, 'django_saml2_auth/denied.html')
 
 
-def _create_new_user(username, email, firstname, lastname):
+def _create_new_user(username, email, firstname, lastname, sso_configuration):
     User = get_user_model()
     user = User.objects.create_user(username, email)
     user.first_name = firstname
     user.last_name = lastname
-    user.is_active = __sso_configuration.new_user_active
+    user.is_active = sso_configuration.new_user_active
     user.save()
     return user
 
 
 @csrf_exempt
 def acs(r):
-    saml_client = _get_saml_client(get_current_domain(r))
+    saml_client = _get_saml_client(get_current_domain(r), r.session.get('sso_configuration'))
     resp = r.POST.get('SAMLResponse', None)
     next_url = r.session.get('login_next_url', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', get_reverse('admin:index')))
 
@@ -147,10 +143,10 @@ def acs(r):
     if user_identity is None:
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
 
-    user_email = user_identity[__sso_configuration.attr_user_email][0]
-    user_name = user_identity[__sso_configuration.attr_user_username][0]
-    user_first_name = user_identity[__sso_configuration.attr_user_firstname][0]
-    user_last_name = user_identity[__sso_configuration.attr_user_lastname][0]
+    user_email = user_identity[r.session.get('sso_configuration').attr_user_email][0]
+    user_name = user_identity[r.session.get('sso_configuration').attr_user_username][0]
+    user_first_name = user_identity[r.session.get('sso_configuration').attr_user_firstname][0]
+    user_last_name = user_identity[r.session.get('sso_configuration').attr_user_lastname][0]
 
     target_user = None
     is_new_user = False
@@ -161,7 +157,7 @@ def acs(r):
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('BEFORE_LOGIN', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['BEFORE_LOGIN'])(user_identity)
     except User.DoesNotExist:
-        if __sso_configuration.auto_create_user:
+        if r.session.get('sso_configuration').auto_create_user:
             target_user = _create_new_user(user_name, user_email, user_first_name, user_last_name)
         if settings.SAML2_AUTH.get('TRIGGER', {}).get('CREATE_USER', None):
             import_string(settings.SAML2_AUTH['TRIGGER']['CREATE_USER'])(user_identity)
@@ -218,13 +214,14 @@ def signin(r):
 
     if provider:
         try:
-            __sso_configuration = SSOConfiguration.objects.get(account=account_instance, sso_provider=provider)
+            sso_configuration = SSOConfiguration.objects.get(account=account_instance, sso_provider=provider)
+            r.session['sso_configuration'] = sso_configuration
         except SSOConfiguration.DoesNotExist:
             return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
     else:
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
 
-    saml_client = _get_saml_client(get_current_domain(r))
+    saml_client = _get_saml_client(get_current_domain(r), r.session.get('sso_configuration'))
     _, info = saml_client.prepare_for_authenticate()
 
     redirect_url = None
