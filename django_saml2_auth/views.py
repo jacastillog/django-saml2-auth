@@ -13,7 +13,6 @@ from saml2.config import Config as Saml2Config
 from django import get_version
 from pkg_resources import parse_version
 from django.conf import settings
-from django.contrib.auth.models import Group
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout, get_user_model, get_backends
 from django.shortcuts import render, redirect
@@ -24,7 +23,6 @@ from django.utils.http import is_safe_url
 
 from rest_auth.utils import jwt_encode
 from leonardo.sso_auth.models import SSOConfiguration
-from leonardo.accounts.models import Account
 
 
 try:
