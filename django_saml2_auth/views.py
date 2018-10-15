@@ -106,7 +106,7 @@ def welcome(r):
     try:
         return render(r, 'django_saml2_auth/welcome.html', {'user': r.user})
     except TemplateDoesNotExist:
-        return HttpResponseRedirect(settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.SAML2_AUTH.get('ASSERTION_URL')))
+        return HttpResponseRedirect(settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.BASE_URL))
 
 
 def denied(r):
@@ -127,7 +127,7 @@ def _create_new_user(username, email, firstname, lastname, sso_configuration):
 def acs(r):
     saml_client = _get_saml_client(get_current_domain(r), r.session.get('sso_configuration'))
     resp = r.POST.get('SAMLResponse', None)
-    next_url = r.session.get('login_next_url', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.SAML2_AUTH.get('ASSERTION_URL')))
+    next_url = r.session.get('login_next_url', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.BASE_URL))
 
     if not resp:
         return HttpResponseRedirect(get_reverse([denied, 'denied', 'django_saml2_auth:denied']))
@@ -187,13 +187,13 @@ def signin(r):
     except:
         import urllib.parse as _urlparse
         from urllib.parse import unquote
-    next_url = r.GET.get('next', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.SAML2_AUTH.get('ASSERTION_URL')))
+    next_url = r.GET.get('next', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.BASE_URL))
 
     try:
         if 'next=' in unquote(next_url):
             next_url = _urlparse.parse_qs(_urlparse.urlparse(unquote(next_url)).query)['next'][0]
     except:
-        next_url = r.GET.get('next', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.SAML2_AUTH.get('ASSERTION_URL')))
+        next_url = r.GET.get('next', settings.SAML2_AUTH.get('DEFAULT_NEXT_URL', settings.BASE_URL))
 
     # Only permit signin requests where the next_url is a safe URL
     if not is_safe_url(next_url, None):
