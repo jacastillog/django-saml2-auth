@@ -201,7 +201,7 @@ def signin(r):
 
     r.session['login_next_url'] = next_url
 
-    sso_configuration_id = r.GET.get('sso_config', False)
+    sso_configuration_id = r.session.get('sso_config', False)
 
     sso_configuration = SSOConfiguration.objects.get(id=sso_configuration_id)
     r.session['sso_configuration'] = sso_configuration
